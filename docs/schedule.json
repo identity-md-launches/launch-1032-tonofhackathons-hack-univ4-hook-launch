@@ -1,0 +1,10 @@
+{
+  "action": "oracle.request",
+  "input": "$renderedHeartbeat",
+  "cadence": {
+    "cron": "0 1 * * 1",
+    "tz": "UTC"
+  },
+  "runs": "$prepaidRuns",
+  "label": "TONOFHACKATHONS weekly judging"
+}

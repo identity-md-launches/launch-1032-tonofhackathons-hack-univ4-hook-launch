@@ -1,0 +1,26 @@
+[
+  {
+    "repository": "Uniswap/v4-core",
+    "ref": "46c6834698c48bc4a463a86d8420f4eb1d7f3b75",
+    "path": "lib/v4-core",
+    "vendored": "Original license plus Solidity import closure needed by src/ and test/; no submodules or package-manager downloads required."
+  },
+  {
+    "repository": "foundry-rs/forge-std",
+    "ref": "v1.9.7",
+    "path": "lib/forge-std",
+    "vendored": "Original license plus Solidity import closure needed by src/ and test/; no submodules or package-manager downloads required."
+  },
+  {
+    "repository": "OpenZeppelin/openzeppelin-contracts",
+    "ref": "fcbae5394ae8ad52d8e580a3477db99814b9d565",
+    "path": "lib/openzeppelin-contracts",
+    "vendored": "Original license plus Solidity import closure needed by src/ and test/; no submodules or package-manager downloads required."
+  },
+  {
+    "repository": "transmissions11/solmate",
+    "ref": "89365b880c4f3c786bdd453d4b8e8fe410344a69",
+    "path": "lib/solmate",
+    "vendored": "Original license plus Solidity import closure needed by src/ and test/; no submodules or package-manager downloads required."
+  }
+]

@@ -1,0 +1,44 @@
+{
+  "source": "https://api.imd.fun/launch/policies",
+  "retrievedAt": "2026-10-08",
+  "policy": {
+    "version": 34,
+    "kind": "univ4_hook",
+    "note": "the Ethereum univ4_hook terms of version 29, also paired with FWA, opening at 2,000,000 FWA",
+    "params": {
+      "kind": "univ4_hook",
+      "owners": {
+        "token": "0xcecc29b037f5064fcdf45a5c318f132ef76aa551",
+        "treasury": "0xcecc29b037f5064fcdf45a5c318f132ef76aa551",
+        "hookAdmin": "0xcecc29b037f5064fcdf45a5c318f132ef76aa551",
+        "lpPosition": "0xcecc29b037f5064fcdf45a5c318f132ef76aa551"
+      },
+      "chainId": 1,
+      "feeTiers": [
+        12500
+      ],
+      "rewardRule": "equal_connected",
+      "totalSupply": "1000000000000000000000000000",
+      "treasuryBps": 1000,
+      "liquidityBps": 8000,
+      "gasCeilingWei": "50000000000000000",
+      "perWalletCapBps": 3000,
+      "initialMarketCaps": {
+        "0x0000000000000000000000000000000000000000": "10000000000000000000",
+        "0xa0df17b5ac76ababa36e1450e2cbcd18a620c845": "2000000000000000000000000",
+        "0xd34a99bc0f67ae1bbd63c660e6d0b0dd03e263b7": "2500000000000000000000"
+      },
+      "contributorPoolBps": 1000,
+      "recentContributorBps": 800,
+      "contributorLockSeconds": 3600,
+      "maxInitialMarketCapWei": "100000000000000000000",
+      "pairedCurrencyAllowlist": [
+        "0x0000000000000000000000000000000000000000",
+        "0xd34a99bc0f67ae1bbd63c660e6d0b0dd03e263b7",
+        "0xa0df17b5ac76ababa36e1450e2cbcd18a620c845"
+      ],
+      "recentContributorWindowSeconds": 43200
+    },
+    "createdAt": "2026-10-07T23:41:14.185Z"
+  }
+}

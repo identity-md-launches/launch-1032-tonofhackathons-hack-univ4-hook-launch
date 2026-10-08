@@ -1,0 +1,34 @@
+{
+  "kind": "univ4_hook",
+  "hook": {
+    "contract": "HackathonMachine",
+    "constructorArgs": [
+      "$poolManager",
+      "$owner",
+      "$factory",
+      "$token",
+      "0xd34a99bc0f67ae1bbd63c660e6d0b0dd03e263b7",
+      "0x5598aa9146215bc13eb26f2c692ad1461fd32982"
+    ],
+    "permissions": [
+      "beforeInitialize",
+      "beforeSwap",
+      "afterSwap",
+      "beforeSwapReturnDelta",
+      "afterSwapReturnDelta"
+    ]
+  },
+  "token": {
+    "contract": "HackToken",
+    "name": "TONOFHACKATHONS",
+    "symbol": "HACK",
+    "decimals": 18
+  },
+  "pool": {
+    "pairedCurrency": "0xd34a99bc0f67ae1bbd63c660e6d0b0dd03e263b7",
+    "fee": 12500,
+    "tickSpacing": 60,
+    "initialPrice": "125270724187523965593206900"
+  },
+  "notes": "Ethereum mainnet, chainId 1. Deploy only HackToken and HackathonMachine; all libraries are internal. Hook flags 0x20cc. Factory deploys and initializes atomically. $owner resolves to the paying wallet for this launch and is permanently excluded as a payout. Request launch economics.poolBps 9000 for the launcher share; its remainder goes to the paying wallet by default (see docs/launch-request.json). The factory performs the supply allocation; the token mints exactly 1000000000000000000000000000 to the factory. Additional 2% IMD hook fees remain as prize funds; the factory's 1% launcher fee is separate. Fees initially become redeemable IMD claims; anyone can redeemFeeClaims and settlement redeems automatically. Specified-IMD partial swaps revert atomically; exact-input sells charge actual filled IMD output. Owner must pin questionHash once using the rendered fixed-window heartbeat, and fund the external weekly oracle schedule. Default split after submitter reward: 70% streamed over 28 days, 10% winner token purchase or stream fallback, 20% carry. No staking, withdrawals or upgrades. See README.md for pool configuration, timelocks, accounting and operational responsibilities. No deployment or broadcast is included."
+}

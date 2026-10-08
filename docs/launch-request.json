@@ -1,0 +1,8 @@
+{
+  "kind": "univ4_hook",
+  "chainId": 1,
+  "pairWith": "imd",
+  "economics": {
+    "poolBps": 9000
+  }
+}
