@@ -248,13 +248,14 @@ contract CustodyHandler is Test {
     }
 
     function rotateVersion(uint8 operation) public {
+        address admin = machine.owner();
         if (operation % 3 == 0) {
             pendingVersion = versionNumber + 1;
             versionReady = vm.getBlockTimestamp() + 7 days;
-            vm.prank(machine.owner());
+            vm.prank(admin);
             machine.queueDomainVersion(vm.toString(pendingVersion));
         } else if (operation % 3 == 1) {
-            vm.prank(machine.owner());
+            vm.prank(admin);
             machine.cancelDomainVersion();
             pendingVersion = 0;
             versionReady = 0;
@@ -268,6 +269,7 @@ contract CustodyHandler is Test {
                 pendingVersion = 0;
                 versionReady = 0;
             }
+            vm.prank(admin);
             machine.executeDomainVersion();
         }
     }
@@ -438,5 +440,32 @@ contract CustodyInvariantTest is MachineFixture {
         invariant_internalAccountingExcludesUnsolicitedDonationsAndMatchesRealAssets();
         invariant_eachSettlementAndStreamRetainsItsOriginalRecipientAndLiability();
         invariant_domainVersionChangesOnlyOnAnExecutedMatureQueue();
+    }
+
+    function test_handlerVersionRequeueCancellationAndExactDelay() public {
+        custody.rotateVersion(2); // No pending change.
+        custody.rotateVersion(0);
+        custody.advance(6 days);
+        custody.rotateVersion(0); // Replacing a queue restarts its full delay.
+        custody.advance(1 days);
+        custody.rotateVersion(2); // Original deadline passed; replacement is still pending.
+        invariant_domainVersionChangesOnlyOnAnExecutedMatureQueue();
+
+        custody.rotateVersion(1);
+        invariant_domainVersionChangesOnlyOnAnExecutedMatureQueue();
+        custody.advance(7 days);
+        custody.rotateVersion(2); // A cancelled queue cannot be executed later.
+
+        custody.rotateVersion(0);
+        custody.advance(7 days - 1);
+        custody.rotateVersion(2);
+        assertEq(machine.domainVersion(), "2");
+        custody.advance(1);
+        custody.rotateVersion(2);
+        assertEq(machine.domainVersion(), "3");
+        custody.rotateVersion(2); // Successful execution clears the queue.
+        invariant_domainVersionChangesOnlyOnAnExecutedMatureQueue();
+        invariant_receivedFundsEqualAllRemainingObligationsAndActualPermittedOutflows();
+        invariant_internalAccountingExcludesUnsolicitedDonationsAndMatchesRealAssets();
     }
 }

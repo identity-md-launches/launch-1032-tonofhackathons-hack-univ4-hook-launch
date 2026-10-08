@@ -7,8 +7,12 @@ import {MockERC20} from "./mocks/MockERC20.sol";
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
 import {IHooks} from "v4-core/src/interfaces/IHooks.sol";
 import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
-import {ModifyLiquidityParams} from "v4-core/src/types/PoolOperation.sol";
+import {ModifyLiquidityParams, SwapParams} from "v4-core/src/types/PoolOperation.sol";
 import {StateLibrary} from "v4-core/src/libraries/StateLibrary.sol";
+import {TickMath} from "v4-core/src/libraries/TickMath.sol";
+import {Currency} from "v4-core/src/types/Currency.sol";
+import {BalanceDelta} from "v4-core/src/types/BalanceDelta.sol";
+import {PoolSwapTest} from "v4-core/src/test/PoolSwapTest.sol";
 
 contract PrizeBuyAdversarialTest is MachineFixture {
     using StateLibrary for IPoolManager;
@@ -68,10 +72,33 @@ contract PrizeBuyAdversarialTest is MachineFixture {
     }
 
     function test_partialBuyRevertsAllPoolEffectsBeforeFallingBack() public {
-        seedPrize();
-        uint256 id = configuredEntry(ONE / 2);
-        // The 10% buy is much larger than can fill within the 1% movement limit.
+        // Exhaust the only liquidity range before the full purchase budget can be spent.
+        liquidity.modifyLiquidity(prizePool, ModifyLiquidityParams(-60, 60, 1_000_000 ether, 0), "");
+        uint256 rate = ONE / 100;
+        uint256 id = configuredEntry(rate);
         machine.fundRound(999_990 ether);
+
+        // Prove the pool returns a nonzero partial fill that satisfies the output floor.
+        // Settlement must reject the unspent input, not merely a poor exchange rate.
+        uint256 snapshot = vm.snapshotState();
+        uint256 budget = 99_000 ether;
+        bool zeroForOne = Currency.unwrap(prizePool.currency0) == address(imd);
+        BalanceDelta delta = swapper.swap(
+            prizePool,
+            SwapParams(
+                zeroForOne, -int256(budget), zeroForOne ? TickMath.MIN_SQRT_PRICE + 1 : TickMath.MAX_SQRT_PRICE - 1
+            ),
+            PoolSwapTest.TestSettings(false, false),
+            ""
+        );
+        int128 input = zeroForOne ? delta.amount0() : delta.amount1();
+        int128 output = zeroForOne ? delta.amount1() : delta.amount0();
+        assertLt(input, 0);
+        assertGt(output, 0);
+        assertLt(uint256(-int256(input)), budget);
+        assertGe(uint256(uint128(output)) * ONE, budget * rate);
+        assertTrue(vm.revertToStateAndDelete(snapshot));
+
         (uint160 priceBefore, int24 tickBefore,,) = IPoolManager(address(manager)).getSlot0(prizePool.toId());
         uint256 imdBefore = imd.balanceOf(address(manager));
         uint256 prizeBefore = prize.balanceOf(address(manager));

@@ -18,13 +18,20 @@ Outgoing IMD is observed through ERC20 transfer logs. Each payment must go to th
 
 Each custody campaign begins with two settled rounds, a successful token purchase and a partial claim, so the stream and payout assertions are exercised even before random actions begin. Invalid operations use expected reverts; unexpected reverts fail the campaign. The ordinary handler scenario explicitly exercises pause, donation, active deny removal, recycling, a rejected premature domain change and its later execution.
 
-Run the complete project with `forge build --offline` and `forge test --offline`. To keep generated artifacts inside the assignment's writable paths, the local checks used:
+The revised domain-version handler executes as the owner, allowing its assertions to reach the timelock checks. A deterministic sequence covers missing queues, replacement, cancellation, one second before maturity, exact maturity, and repeated execution. The partial-purchase test uses a narrow liquidity range and first proves that a direct swap returns a nonzero partial fill above the entrant's output floor. After restoring that snapshot, it checks that settlement streams the purchase allocation and restores pool balances and price. It no longer assumes a spot-relative price limit.
+
+Run the complete project with `forge build --offline` and `forge test --offline`. To keep generated artifacts and failure records outside the repository, the local checks used:
 
 ```sh
-FOUNDRY_OUT=test/scratch/out FOUNDRY_CACHE_PATH=test/scratch/cache forge build --offline
-FOUNDRY_OUT=test/scratch/out FOUNDRY_CACHE_PATH=test/scratch/cache forge test --offline
+export FOUNDRY_OUT=/tmp/hack-foundry-out
+export FOUNDRY_CACHE_PATH=/tmp/hack-foundry-cache
+export FOUNDRY_TEST_FAILURES_FILE=/tmp/hack-test-failures
+export FOUNDRY_FUZZ_FAILURE_PERSIST_DIR=/tmp/hack-fuzz-failures
+export FOUNDRY_INVARIANT_FAILURE_PERSIST_DIR=/tmp/hack-invariant-failures
+forge build --offline
+forge test --offline
 ```
 
 Inline settings run each new custody campaign 256 times at depth 80, each token campaign 256 times at depth 64, and each new stateless fuzz property 1,000 times. No submitted test depends on `test/scratch/`.
 
-The existing manifest, stored policy snapshot, heartbeat placeholders, weekly schedule, runtime sizes and absence of external library links were also checked offline. The hook runtime is 20,753 bytes and the token runtime is 1,502 bytes. The factory's live allocation and actual oracle scheduling are outside this local test harness; deployment values remain the existing manifest placeholders. The original protocol-vector conformance and signer-rotation tests remain part of the full suite.
+The existing manifest, stored policy snapshot, heartbeat placeholders, weekly schedule, runtime sizes and absence of external library links were also checked offline. The hook runtime is 23,221 bytes and the token runtime is 1,502 bytes. The factory's live allocation and actual oracle scheduling are outside this local test harness; deployment values remain the existing manifest placeholders. The original protocol-vector conformance and signer-rotation tests remain part of the full suite.
