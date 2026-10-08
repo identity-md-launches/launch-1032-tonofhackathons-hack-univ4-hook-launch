@@ -90,13 +90,15 @@ contract AttestationTest is MachineFixture {
         vm.warp(queued + elapsed);
         assertEq(machine.oracleSigner(), old);
         vm.expectRevert(HackathonMachine.TooEarly.selector);
+        vm.prank(owner);
         machine.executeSigner();
         assertEq(machine.oracleSigner(), old);
         vm.warp(queued + 7 days);
-        vm.prank(bob);
+        vm.prank(owner);
         machine.executeSigner();
         assertEq(machine.oracleSigner(), replacement);
         vm.expectRevert(HackathonMachine.NoPendingChange.selector);
+        vm.prank(owner);
         machine.executeSigner();
     }
 
@@ -111,6 +113,7 @@ contract AttestationTest is MachineFixture {
         machine.cancelSigner();
         vm.warp(block.timestamp + 7 days);
         vm.expectRevert(HackathonMachine.NoPendingChange.selector);
+        vm.prank(owner);
         machine.executeSigner();
         vm.prank(owner);
         machine.queueSigner(vm.addr(123456));
@@ -119,6 +122,7 @@ contract AttestationTest is MachineFixture {
         machine.queueSigner(vm.addr(654321));
         vm.warp(block.timestamp + 1 days);
         vm.expectRevert(HackathonMachine.TooEarly.selector);
+        vm.prank(owner);
         machine.executeSigner();
     }
 
@@ -132,8 +136,10 @@ contract AttestationTest is MachineFixture {
         assertEq(machine.domainVersion(), "2");
         assertEq(machine.attestationDigest(a), digest);
         vm.expectRevert(HackathonMachine.TooEarly.selector);
+        vm.prank(owner);
         machine.executeDomainVersion();
         vm.warp(block.timestamp + 1);
+        vm.prank(owner);
         machine.executeDomainVersion();
         assertEq(machine.domainVersion(), "3");
         assertNotEq(machine.attestationDigest(a), digest);
@@ -145,6 +151,7 @@ contract AttestationTest is MachineFixture {
         machine.cancelDomainVersion();
         vm.warp(block.timestamp + 7 days);
         vm.expectRevert(HackathonMachine.NoPendingChange.selector);
+        vm.prank(owner);
         machine.executeDomainVersion();
     }
 
@@ -154,6 +161,7 @@ contract AttestationTest is MachineFixture {
         machine.queueDomainVersion("3");
         vm.stopPrank();
         vm.warp(block.timestamp + 7 days);
+        vm.prank(owner);
         machine.executeSigner();
         uint256 id = enter(alice, address(0));
         closeRound();
@@ -161,6 +169,7 @@ contract AttestationTest is MachineFixture {
         bytes memory oldKeySig = signature(a);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(123456, machine.attestationDigest(a));
         bytes memory oldVersionSig = abi.encodePacked(r, s, v);
+        vm.prank(owner);
         machine.executeDomainVersion();
         vm.expectRevert(OracleAttestationConsumer.BadSignature.selector);
         machine.submitResult(a, oldKeySig);

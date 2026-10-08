@@ -189,10 +189,12 @@ contract MachineHandler is Test {
         if (ready == 0) return;
         if (block.timestamp < ready) {
             vm.expectRevert(HackathonMachine.TooEarly.selector);
+            vm.prank(owner);
             machine.executeSigner();
             assertEq(machine.oracleSigner(), activeSigner);
         } else {
             activeSigner = machine.pendingSigner();
+            vm.prank(owner);
             machine.executeSigner();
         }
     }

@@ -8,6 +8,7 @@ import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
 import {IHooks} from "v4-core/src/interfaces/IHooks.sol";
 import {Hooks} from "v4-core/src/libraries/Hooks.sol";
 import {StateLibrary} from "v4-core/src/libraries/StateLibrary.sol";
+import {TransientStateLibrary} from "v4-core/src/libraries/TransientStateLibrary.sol";
 import {TickMath} from "v4-core/src/libraries/TickMath.sol";
 import {FullMath} from "v4-core/src/libraries/FullMath.sol";
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
@@ -35,6 +36,8 @@ contract HackathonMachine is OracleAttestationConsumer, ReentrancyGuard {
     error PartialSpecifiedSwap();
     error Slippage();
     error InsufficientExecutionGas();
+    error ManagerUnlocked();
+    error EntryFeeExceedsMaximum();
 
     uint256 public constant MONDAY_EPOCH = 345600; // 1970-01-05 00:00:00 UTC
     uint256 public constant WEEK = 7 days;
@@ -113,6 +116,7 @@ contract HackathonMachine is OracleAttestationConsumer, ReentrancyGuard {
 
     event PoolBound(PoolId indexed poolId);
     event Registered(uint64 indexed round, uint256 indexed entryId, address indexed payout, address payer);
+    event EntryUpdated(uint256 indexed entryId);
     event Sponsored(uint64 indexed round, address indexed sponsor, uint256 amount);
     event FeeCollected(uint64 indexed round, uint256 amount);
     event ClaimsRedeemed(uint256 amount);
@@ -306,22 +310,72 @@ contract HackathonMachine is OracleAttestationConsumer, ReentrancyGuard {
         address payout,
         address token
     ) external nonReentrant returns (uint256 id) {
+        return _register(name, repoUrl, imdRef, payout, token, type(uint256).max);
+    }
+
+    /// @notice Registers only if the live fee is within the caller's stated budget.
+    function registerWithMaxFee(
+        string calldata name,
+        string calldata repoUrl,
+        string calldata imdRef,
+        address payout,
+        address token,
+        uint256 maxEntryFee
+    ) external nonReentrant returns (uint256 id) {
+        return _register(name, repoUrl, imdRef, payout, token, maxEntryFee);
+    }
+
+    function _register(
+        string calldata name,
+        string calldata repoUrl,
+        string calldata imdRef,
+        address payout,
+        address token,
+        uint256 maxEntryFee
+    ) private returns (uint256 id) {
         if (entriesPaused) revert EntriesPaused();
-        if (
-            bytes(name).length == 0 || bytes(name).length > 64 || bytes(repoUrl).length == 0
-                || bytes(repoUrl).length > 200 || bytes(imdRef).length > 64 || token == address(imd)
-                || (token != address(0) && token.code.length == 0)
-        ) revert InvalidInput();
+        uint256 fee = entryFee;
+        if (fee > maxEntryFee) revert EntryFeeExceedsMaximum();
+        _validateEntry(name, repoUrl, imdRef, token);
         _syncRounds();
         uint64 round = accountingRound;
         if (!_eligible(payout, round) || registered[round][payout]) revert Ineligible();
         registered[round][payout] = true;
         id = (uint256(round) << 32) | ++entryCount[round];
         entries[id] = Entry(payout, token, name, repoUrl, imdRef);
-        openPot += entryFee;
-        liquidBalance += entryFee;
-        imd.safeTransferFrom(msg.sender, address(this), entryFee);
+        openPot += fee;
+        liquidBalance += fee;
+        imd.safeTransferFrom(msg.sender, address(this), fee);
         emit Registered(round, id, payout, msg.sender);
+    }
+
+    /// @notice The payout controls its entry until close, even if someone else paid to register it.
+    /// @dev Updating clears the purchase configuration; the payout must opt in again explicitly.
+    function updateEntry(
+        uint256 id,
+        string calldata name,
+        string calldata repoUrl,
+        string calldata imdRef,
+        address token
+    ) external nonReentrant {
+        address payout = entries[id].payout;
+        if (msg.sender != payout) revert Unauthorized();
+        if (id >> 32 != currentRound()) revert InvalidInput();
+        _validateEntry(name, repoUrl, imdRef, token);
+        entries[id] = Entry(payout, token, name, repoUrl, imdRef);
+        delete buyConfigs[id];
+        emit EntryUpdated(id);
+    }
+
+    function _validateEntry(string calldata name, string calldata repoUrl, string calldata imdRef, address token)
+        private
+        view
+    {
+        if (
+            bytes(name).length == 0 || bytes(name).length > 64 || bytes(repoUrl).length == 0
+                || bytes(repoUrl).length > 200 || bytes(imdRef).length > 64 || token == address(imd)
+                || (token != address(0) && token.code.length == 0)
+        ) revert InvalidInput();
     }
 
     function fundRound(uint256 amount) external nonReentrant {
@@ -360,6 +414,8 @@ contract HackathonMachine is OracleAttestationConsumer, ReentrancyGuard {
     }
 
     function submitResult(OracleAttestation.Attestation calldata a, bytes calldata signature) external nonReentrant {
+        // A caller must not manufacture purchase failure by nesting settlement in its own unlock.
+        if (TransientStateLibrary.isUnlocked(poolManager)) revert ManagerUnlocked();
         _syncRounds();
         if (accountingRound == 0) revert InvalidResult();
         uint64 round = accountingRound - 1;
@@ -451,18 +507,15 @@ contract HackathonMachine is OracleAttestationConsumer, ReentrancyGuard {
         BuyConfig storage config = buyConfigs[id];
         PoolKey memory key = config.key;
         bool zeroForOne = Currency.unwrap(key.currency0) == address(imd);
-        (uint160 price,,,) = poolManager.getSlot0(key.toId());
-        // At most ~1% price movement during execution, in addition to the precommitted absolute floor.
-        uint256 limit = zeroForOne ? uint256(price) * 995 / 1000 : uint256(price) * 1005 / 1000;
-        if (limit <= TickMath.MIN_SQRT_PRICE || limit >= TickMath.MAX_SQRT_PRICE) revert Slippage();
+        // The entrant's absolute output floor bounds execution, including the whole budget's price impact.
+        uint160 limit = zeroForOne ? TickMath.MIN_SQRT_PRICE + 1 : TickMath.MAX_SQRT_PRICE - 1;
         uint256 minimum = FullMath.mulDivRoundingUp(amount, config.minRateX96, Q96);
         // v4 skips a hook's own callbacks. Apply the same exact-input buy fee explicitly
         // when a prize purchases HACK through this hook's pool; retain it as liquid pot.
         uint256 ownFee = address(key.hooks) == address(this) ? amount * FEE_BPS / 10_000 : 0;
         uint256 spend = amount - ownFee;
-        BalanceDelta delta = poolManager.swap(
-            key, SwapParams(zeroForOne, -int256(uint256(uint128(_asInt128(spend)))), uint160(limit)), ""
-        );
+        BalanceDelta delta =
+            poolManager.swap(key, SwapParams(zeroForOne, -int256(uint256(uint128(_asInt128(spend)))), limit), "");
         int128 input = zeroForOne ? delta.amount0() : delta.amount1();
         int128 output = zeroForOne ? delta.amount1() : delta.amount0();
         if (int256(input) != -int256(spend) || output <= 0 || uint256(uint128(output)) < minimum) revert Slippage();
@@ -574,7 +627,7 @@ contract HackathonMachine is OracleAttestationConsumer, ReentrancyGuard {
         emit SignerCancelled();
     }
 
-    function executeSigner() external {
+    function executeSigner() external onlyOwner {
         if (signerReadyAt == 0) revert NoPendingChange();
         if (block.timestamp < signerReadyAt) revert TooEarly();
         address signer = pendingSigner;
@@ -596,7 +649,7 @@ contract HackathonMachine is OracleAttestationConsumer, ReentrancyGuard {
         emit DomainVersionCancelled();
     }
 
-    function executeDomainVersion() external {
+    function executeDomainVersion() external onlyOwner {
         if (versionReadyAt == 0) revert NoPendingChange();
         if (block.timestamp < versionReadyAt) revert TooEarly();
         domainVersion = pendingDomainVersion;
